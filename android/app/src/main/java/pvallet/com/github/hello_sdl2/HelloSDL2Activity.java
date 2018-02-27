@@ -17,7 +17,6 @@ public class HelloSDL2Activity extends SDLActivity
     protected String[] getLibraries() {
         return new String[]{
                 "SDL2",
-                "SDL2_image",
                 "main"
         };
     }
