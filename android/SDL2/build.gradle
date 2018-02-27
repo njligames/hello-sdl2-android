@@ -23,7 +23,7 @@ android {
     }
     externalNativeBuild {
         ndkBuild {
-            path '../../external/SDL2/Android.mk'
+            path '../../android/thirdparty/SDL2/Android.mk'
         }
     }
 }

@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.4.1)
 
 string(TOLOWER ${CMAKE_BUILD_TYPE} ANDROID_BUILD_DIR)
 set(DISTRIBUTION_DIR ${CMAKE_SOURCE_DIR}/android/distribution/android/SDL2/intermediates/ndkBuild)
-set(SOURCE_FILES src/main.cpp)
-set(SDL_LOCATION ${CMAKE_SOURCE_DIR}/external/SDL2)
+#set(SOURCE_FILES src/main.cpp)
+set(SOURCE_FILES android/test_engine_repo/src/main.cpp)
+set(SDL_LOCATION ${CMAKE_SOURCE_DIR}/android/thirdparty/SDL2)
 
 add_library( SDL2 SHARED IMPORTED )
 set_target_properties(SDL2 PROPERTIES IMPORTED_LOCATION

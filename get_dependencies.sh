@@ -1,6 +1,6 @@
 #!/bin/bash -x
 
-cd external/SDL2
+cd android/thirdparty/SDL2
 
 wget https://www.libsdl.org/release/SDL2-2.0.7.zip
 unzip -q SDL2-2.0.7.zip
