@@ -1,8 +1,8 @@
-package pvallet.com.github.hello_sdl2;
+package com.njlicgames.engine.android.source;
 
 import org.libsdl.app.SDLActivity;
 
-public class HelloSDL2Activity extends SDLActivity
+public class Activity extends SDLActivity
 {
 	 /**
      * This method is called by SDL before loading the native shared libraries.

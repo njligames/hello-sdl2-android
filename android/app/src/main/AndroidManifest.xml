@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           
-    package="pvallet.com.github.hello_sdl2"
+    package="com.njlicgames.engine.android.source"
     >
 
     <application android:allowBackup="true"
