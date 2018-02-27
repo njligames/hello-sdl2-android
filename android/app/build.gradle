@@ -3,6 +3,15 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 25
     buildToolsVersion "26.0.0"
+
+    sourceSets {
+      main {
+        assets.srcDirs = [
+        '../res'
+        ]
+      }
+    }
+
     defaultConfig {
         applicationId "com.njlicgames.engine.android.source"
         minSdkVersion 21
