@@ -36,16 +36,8 @@ import android.content.pm.ActivityInfo;
 public class SDLActivity extends Activity {
     private static final String TAG = "SDL";
 
-    public static boolean mIsResumedCalled, mIsSurfaceReady, mHasFocus;
-
-    // Handle the state of the native layer
-    public enum NativeState {
-           INIT, RESUMED, PAUSED 
-    }
-
-    public static NativeState mNextNativeState;
-    public static NativeState mCurrentNativeState;
-
+    // Keep track of the paused state
+    public static boolean mIsPaused, mIsSurfaceReady, mHasFocus;
     public static boolean mExitCalledFromJava;
 
     /** If shared libraries (e.g. SDL or the native application) could not be loaded. */
@@ -80,6 +72,7 @@ public class SDLActivity extends Activity {
     protected String[] getLibraries() {
         return new String[] {
             "SDL2",
+            // "SDL2_image",
             // "SDL2_mixer",
             // "SDL2_net",
             // "SDL2_ttf",
@@ -117,11 +110,9 @@ public class SDLActivity extends Activity {
         mAudioRecord = null;
         mExitCalledFromJava = false;
         mBrokenLibraries = false;
-        mIsResumedCalled = false;
+        mIsPaused = false;
         mIsSurfaceReady = false;
         mHasFocus = true;
-        mNextNativeState = NativeState.INIT;
-        mCurrentNativeState = NativeState.INIT;
     }
 
     // Setup
@@ -204,28 +195,24 @@ public class SDLActivity extends Activity {
     protected void onPause() {
         Log.v(TAG, "onPause()");
         super.onPause();
-        mNextNativeState = NativeState.PAUSED;
-        mIsResumedCalled = false;
 
         if (SDLActivity.mBrokenLibraries) {
            return;
         }
 
-        SDLActivity.handleNativeState();
+        SDLActivity.handlePause();
     }
 
     @Override
     protected void onResume() {
         Log.v(TAG, "onResume()");
         super.onResume();
-        mNextNativeState = NativeState.RESUMED;
-        mIsResumedCalled = true;
 
         if (SDLActivity.mBrokenLibraries) {
            return;
         }
 
-        SDLActivity.handleNativeState();
+        SDLActivity.handleResume();
     }
 
 
@@ -240,12 +227,8 @@ public class SDLActivity extends Activity {
 
         SDLActivity.mHasFocus = hasFocus;
         if (hasFocus) {
-           mNextNativeState = NativeState.RESUMED;
-        } else {
-           mNextNativeState = NativeState.PAUSED;
+            SDLActivity.handleResume();
         }
-        
-        SDLActivity.handleNativeState();
     }
 
     @Override
@@ -263,9 +246,6 @@ public class SDLActivity extends Activity {
     @Override
     protected void onDestroy() {
         Log.v(TAG, "onDestroy()");
-
-        mNextNativeState = NativeState.PAUSED;
-        SDLActivity.handleNativeState();
 
         if (SDLActivity.mBrokenLibraries) {
            super.onDestroy();
@@ -315,68 +295,28 @@ public class SDLActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
-    /* Transition to next state */
-    public static void handleNativeState() {
-
-        if (mNextNativeState == mCurrentNativeState) {
-            // Already in same state, discard.
-            return;
-        }
-
-        // Try a transition to init state
-        if (mNextNativeState == NativeState.INIT) {
-
-            mCurrentNativeState = mNextNativeState;
-            return;
-        }
-
-        // Try a transition to paused state
-        if (mNextNativeState == NativeState.PAUSED) {
-            nativePause();
+    /** Called by onPause or surfaceDestroyed. Even if surfaceDestroyed
+     *  is the first to be called, mIsSurfaceReady should still be set
+     *  to 'true' during the call to onPause (in a usual scenario).
+     */
+    public static void handlePause() {
+        if (!SDLActivity.mIsPaused && SDLActivity.mIsSurfaceReady) {
+            SDLActivity.mIsPaused = true;
+            SDLActivity.nativePause();
             mSurface.handlePause();
-            mCurrentNativeState = mNextNativeState;
-            return;
         }
+    }
 
-        // Try a transition to resumed state
-        if (mNextNativeState == NativeState.RESUMED) {
-
-           if (mIsSurfaceReady && mHasFocus && mIsResumedCalled) {
-
-              if (mSDLThread == null) {
-                  // This is the entry point to the C app.
-                  // Start up the C app thread and enable sensor input for the first time
-
-                  final Thread sdlThread = new Thread(new SDLMain(), "SDLThread");
-                  mSurface.enableSensor(Sensor.TYPE_ACCELEROMETER, true);
-                  sdlThread.start();
-
-                  // Set up a listener thread to catch when the native thread ends
-                  mSDLThread = new Thread(new Runnable(){
-                      @Override
-                      public void run(){
-                          try {
-                              sdlThread.join();
-                          }
-                          catch(Exception e){}
-                          finally{
-                              // Native thread has finished
-                              if (! mExitCalledFromJava) {
-                                  handleNativeExit();
-                              }
-                          }
-                      }
-                  }, "SDLThreadListener");
-                  mSDLThread.start();
-              }
-
-
-              nativeResume();
-              mSurface.handleResume();
-              mCurrentNativeState = mNextNativeState;
-          }
-          return;
-       }
+    /** Called by onResume or surfaceCreated. An actual resume should be done only when the surface is ready.
+     * Note: Some Android variants may send multiple surfaceChanged events, so we don't need to resume
+     * every time we get one of those events, only if it comes after surfaceDestroyed
+     */
+    public static void handleResume() {
+        if (SDLActivity.mIsPaused && SDLActivity.mIsSurfaceReady && SDLActivity.mHasFocus) {
+            SDLActivity.mIsPaused = false;
+            SDLActivity.nativeResume();
+            mSurface.handleResume();
+        }
     }
 
     /* The native thread has finished */
@@ -1159,11 +1099,8 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
         Log.v("SDL", "surfaceDestroyed()");
-
-        // Transition to pause, if needed
-        SDLActivity.mNextNativeState = SDLActivity.NativeState.PAUSED;
-        SDLActivity.handleNativeState();
-
+        // Call this *before* setting mIsSurfaceReady to 'false'
+        SDLActivity.handlePause();
         SDLActivity.mIsSurfaceReady = false;
         SDLActivity.onNativeSurfaceDestroyed();
     }
@@ -1232,12 +1169,12 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         {
             // Accept any
         }
-        else if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT || requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT)
+        else if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
         {
             if (mWidth > mHeight) {
                skip = true;
             }
-        } else if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE || requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
+        } else if (requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
             if (mWidth < mHeight) {
                skip = true;
             }
@@ -1256,17 +1193,45 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
 
         if (skip) {
            Log.v("SDL", "Skip .. Surface is not ready.");
-           SDLActivity.mIsSurfaceReady = false;
            return;
         }
-        
-        /* Surface is ready */
-        SDLActivity.mIsSurfaceReady = true;
 
-        /* If the surface has been previously destroyed by onNativeSurfaceDestroyed, recreate it here */
+
+        // Set mIsSurfaceReady to 'true' *before* making a call to handleResume
+        SDLActivity.mIsSurfaceReady = true;
         SDLActivity.onNativeSurfaceChanged();
 
-        SDLActivity.handleNativeState();
+
+        if (SDLActivity.mSDLThread == null) {
+            // This is the entry point to the C app.
+            // Start up the C app thread and enable sensor input for the first time
+
+            final Thread sdlThread = new Thread(new SDLMain(), "SDLThread");
+            enableSensor(Sensor.TYPE_ACCELEROMETER, true);
+            sdlThread.start();
+
+            // Set up a listener thread to catch when the native thread ends
+            SDLActivity.mSDLThread = new Thread(new Runnable(){
+                @Override
+                public void run(){
+                    try {
+                        sdlThread.join();
+                    }
+                    catch(Exception e){}
+                    finally{
+                        // Native thread has finished
+                        if (! SDLActivity.mExitCalledFromJava) {
+                            SDLActivity.handleNativeExit();
+                        }
+                    }
+                }
+            }, "SDLThreadListener");
+            SDLActivity.mSDLThread.start();
+        }
+
+        if (SDLActivity.mHasFocus) {
+            SDLActivity.handleResume();
+        }
     }
 
     // Key events
