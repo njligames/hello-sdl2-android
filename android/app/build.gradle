@@ -22,6 +22,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++11 -frtti -fexceptions"
+                arguments "-DANDROID=TRUE"
             }
         }
 	ndk {
